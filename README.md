@@ -436,20 +436,25 @@ If you want to serve Swiparr under a subpath — e.g. `https://jellyfin.example.
 
 > **The prebuilt image from `ghcr.io` does not support `URL_BASE_PATH`** — it is built without a base path. You must build your own image.
 
-#### Step 1 — Clone and build with your base path
+#### If you are not using compose and want to build the image
 
 ```bash
 git clone https://github.com/m3sserstudi0s/swiparr.git
 cd swiparr
 docker build --build-arg URL_BASE_PATH=/swipe -t swiparr-custom .
 ```
+Then use `swiparr-custom` as your image name in your docker run command.
 
-#### Step 2 — Use your custom image in compose
+#### If you are using compose, compose can build and manage the image for you at runtime
 
 ```yaml
 services:
   swiparr:
-    image: swiparr-custom          # your locally built image
+    pull_policy: build
+    build:
+      context: https://github.com/m3sserstudi0s/swiparr.git
+      args:
+        URL_BASE_PATH: /swipe
     container_name: swiparr
     restart: unless-stopped
     environment:
