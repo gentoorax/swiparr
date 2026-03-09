@@ -11,24 +11,20 @@ steps:
   - name: install
     image: node:24-alpine
     commands:
-      - npm ci
+      - npm ci --include=dev
 
   - name: lint
     image: node:24-alpine
     depends_on:
       - install
     commands:
-      - npm ci
       - npm run lint
 
   - name: build
     image: node:24-alpine
     depends_on:
       - install
-    environment:
-      NODE_ENV: production
     commands:
-      - npm ci
       - npm run build
 
 ---
@@ -45,7 +41,7 @@ steps:
     image: node:24-alpine
     commands:
       - if [ "$${RUN_MODE:-ci}" = "publish" ]; then echo "RUN_MODE=publish, skipping CI install."; exit 0; fi
-      - npm ci
+      - npm ci --include=dev
 
   - name: lint
     image: node:24-alpine
@@ -53,18 +49,14 @@ steps:
       - install
     commands:
       - if [ "$${RUN_MODE:-ci}" = "publish" ]; then echo "RUN_MODE=publish, skipping CI lint."; exit 0; fi
-      - npm ci
       - npm run lint
 
   - name: build
     image: node:24-alpine
     depends_on:
       - install
-    environment:
-      NODE_ENV: production
     commands:
       - if [ "$${RUN_MODE:-ci}" = "publish" ]; then echo "RUN_MODE=publish, skipping CI build."; exit 0; fi
-      - npm ci
       - npm run build
 
 ---
