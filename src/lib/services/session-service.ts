@@ -9,8 +9,41 @@ import { ProviderType } from "@/lib/providers/types";
 import { ConfigService } from "./config-service";
 import { logger } from "@/lib/logger";
 import { encryptValue, getGuestLendingSecret } from "@/lib/security/crypto";
+import { config } from "@/lib/config";
 
 export class SessionService {
+  private static normalizeServerUrl(value?: string): string | undefined {
+    if (!value) return undefined;
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) return undefined;
+
+    try {
+      return new URL(trimmed).toString().replace(/\/+$/, "");
+    } catch {
+      return trimmed;
+    }
+  }
+
+  private static getProviderDefaultUrl(provider?: string): string | undefined {
+    if (provider === ProviderType.JELLYFIN) {
+      return this.normalizeServerUrl(config.JELLYFIN_PUBLIC_URL || config.JELLYFIN_URL);
+    }
+
+    if (provider === ProviderType.EMBY) {
+      return this.normalizeServerUrl(config.EMBY_PUBLIC_URL || config.EMBY_URL);
+    }
+
+    if (provider === ProviderType.PLEX) {
+      return this.normalizeServerUrl(config.PLEX_PUBLIC_URL || config.PLEX_URL);
+    }
+
+    return undefined;
+  }
+
+  private static resolveServerUrl(provider?: string, providerConfig?: { serverUrl?: string }): string | undefined {
+    return this.normalizeServerUrl(providerConfig?.serverUrl) || this.getProviderDefaultUrl(provider);
+  }
+
   private static generateCode(): string {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 32 chars, no ambiguous I/O/0/1
     const bytes = crypto.randomBytes(4);
@@ -31,6 +64,12 @@ export class SessionService {
     const encryptedAccessToken = shouldEncrypt ? encryptValue(user.AccessToken!, encryptionSecret!) : null;
     const encryptedDeviceId = shouldEncrypt ? encryptValue(user.DeviceId || "", encryptionSecret!) : null;
     
+    const resolvedServerUrl = this.resolveServerUrl(user.provider, user.providerConfig as { serverUrl?: string } | undefined);
+    const providerConfig =
+      resolvedServerUrl || user.providerConfig
+        ? { ...(user.providerConfig || {}), ...(resolvedServerUrl ? { serverUrl: resolvedServerUrl } : {}) }
+        : undefined;
+
     await db.insert(sessions).values({
       id: uuidv4(),
       code,
@@ -38,7 +77,7 @@ export class SessionService {
       hostAccessToken: shouldEncrypt ? encryptedAccessToken : null,
       hostDeviceId: shouldEncrypt ? encryptedDeviceId : null,
       provider: user.provider,
-      providerConfig: user.providerConfig ? JSON.stringify(user.providerConfig) : null,
+      providerConfig: providerConfig ? JSON.stringify(providerConfig) : null,
       randomSeed: this.generateRandomSeed(),
     });
 
@@ -72,8 +111,10 @@ export class SessionService {
       if ([ProviderType.JELLYFIN, ProviderType.EMBY, ProviderType.PLEX].includes(existingSession.provider as any)) {
         const sessionConfig = existingSession.providerConfig ? JSON.parse(existingSession.providerConfig) : {};
         const userConfig = user.providerConfig || {};
-        if (sessionConfig.serverUrl !== userConfig.serverUrl) {
-          throw new Error(`Server mismatch: Session is on ${sessionConfig.serverUrl}, you are on ${userConfig.serverUrl}`);
+        const sessionServerUrl = this.resolveServerUrl(existingSession.provider, sessionConfig);
+        const userServerUrl = this.resolveServerUrl(user.provider, userConfig);
+        if (sessionServerUrl && userServerUrl && sessionServerUrl !== userServerUrl) {
+          throw new Error(`Server mismatch: Session is on ${sessionServerUrl}, you are on ${userServerUrl}`);
         }
       }
     }
