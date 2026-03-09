@@ -18,6 +18,7 @@ steps:
     depends_on:
       - install
     commands:
+      - npm install --no-save eslint-config-next@16.1.6
       - npx eslint . --max-warnings=0
 
   - name: build
@@ -49,6 +50,7 @@ steps:
       - install
     commands:
       - if [ "$${RUN_MODE:-ci}" = "publish" ]; then echo "RUN_MODE=publish, skipping CI lint."; exit 0; fi
+      - npm install --no-save eslint-config-next@16.1.6
       - npx eslint . --max-warnings=0
 
   - name: build
