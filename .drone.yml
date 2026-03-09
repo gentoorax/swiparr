@@ -1,0 +1,265 @@
+kind: pipeline
+type: docker
+name: ci
+
+trigger:
+  event:
+    - push
+    - pull_request
+
+steps:
+  - name: install
+    image: node:24-alpine
+    commands:
+      - npm ci
+
+  - name: lint
+    image: node:24-alpine
+    depends_on:
+      - install
+    commands:
+      - npm ci
+      - npm run lint
+
+  - name: build
+    image: node:24-alpine
+    depends_on:
+      - install
+    environment:
+      NODE_ENV: production
+    commands:
+      - npm ci
+      - npm run build
+
+---
+kind: pipeline
+type: docker
+name: ci-custom
+
+trigger:
+  event:
+    - custom
+
+steps:
+  - name: install
+    image: node:24-alpine
+    commands:
+      - if [ "$${RUN_MODE:-ci}" = "publish" ]; then echo "RUN_MODE=publish, skipping CI install."; exit 0; fi
+      - npm ci
+
+  - name: lint
+    image: node:24-alpine
+    depends_on:
+      - install
+    commands:
+      - if [ "$${RUN_MODE:-ci}" = "publish" ]; then echo "RUN_MODE=publish, skipping CI lint."; exit 0; fi
+      - npm ci
+      - npm run lint
+
+  - name: build
+    image: node:24-alpine
+    depends_on:
+      - install
+    environment:
+      NODE_ENV: production
+    commands:
+      - if [ "$${RUN_MODE:-ci}" = "publish" ]; then echo "RUN_MODE=publish, skipping CI build."; exit 0; fi
+      - npm ci
+      - npm run build
+
+---
+kind: pipeline
+type: docker
+name: alpha-image-publish
+
+trigger:
+  event:
+    - push
+  branch:
+    - main
+
+steps:
+  - name: calculate-alpha-version
+    image: alpine/git:2.47.2
+    commands:
+      - mkdir -p .drone
+      - shortCommit="$(git rev-parse --short HEAD)"
+      - patchVersion="$${DRONE_BUILD_NUMBER}"
+      - versionBase="1.3.$${patchVersion}"
+      - alphaTag="$${versionBase}-alpha.$${shortCommit}"
+      - 'echo "Resolved alpha version: versionBase=$${versionBase}, shortCommit=$${shortCommit}, alphaTag=$${alphaTag}"'
+      - echo "SHORT_COMMIT=$${shortCommit}" > .drone/version.env
+      - echo "VERSION_BASE=$${versionBase}" >> .drone/version.env
+      - echo "ALPHA_TAG=$${alphaTag}" >> .drone/version.env
+
+  - name: build-and-push-swiparr-image
+    image: gcr.io/kaniko-project/executor:v1.23.2-debug
+    depends_on:
+      - calculate-alpha-version
+    environment:
+      HOME: /kaniko
+      HARBOR_USERNAME:
+        from_secret: harbor_robot_username
+      HARBOR_PASSWORD:
+        from_secret: harbor_robot_password
+      HARBOR_CA_CERT:
+        from_secret: harbor_ca_cert
+    commands:
+      - . .drone/version.env
+      - if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi
+      - authValue="$(printf '%s:%s' "$${HARBOR_USERNAME}" "$${HARBOR_PASSWORD}" | base64 | tr -d '\n')"
+      - mkdir -p /kaniko/.docker
+      - printf '{"auths":{"harbor.internal.promethix.net":{"auth":"%s"}}}' "$${authValue}" > /kaniko/.docker/config.json
+      - if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi
+      - mkdir -p /kaniko/ssl/certs
+      - printf '%s' "$${HARBOR_CA_CERT}" > /kaniko/ssl/certs/harbor-ca.crt
+      - imageRef="harbor.internal.promethix.net/promethix/swiparr"
+      - 'echo "Publishing image: tag1=$${imageRef}:$${ALPHA_TAG}, tag2=$${imageRef}:alpha"'
+      - /kaniko/executor --context "$(pwd)" --dockerfile "$(pwd)/Dockerfile" --registry-certificate harbor.internal.promethix.net=/kaniko/ssl/certs/harbor-ca.crt --destination "$${imageRef}:$${ALPHA_TAG}" --destination "$${imageRef}:alpha"
+
+---
+kind: pipeline
+type: docker
+name: alpha-image-publish-custom
+
+trigger:
+  event:
+    - custom
+  branch:
+    - main
+
+steps:
+  - name: calculate-alpha-version
+    image: alpine/git:2.47.2
+    commands:
+      - case "$${RUN_MODE:-ci}" in publish|ci-and-publish) ;; *) echo "RUN_MODE=$${RUN_MODE:-ci}, skipping publish versioning."; exit 0;; esac
+      - mkdir -p .drone
+      - shortCommit="$(git rev-parse --short HEAD)"
+      - patchVersion="$${DRONE_BUILD_NUMBER}"
+      - versionBase="1.3.$${patchVersion}"
+      - alphaTag="$${versionBase}-alpha.$${shortCommit}"
+      - 'echo "Resolved alpha version: versionBase=$${versionBase}, shortCommit=$${shortCommit}, alphaTag=$${alphaTag}"'
+      - echo "SHORT_COMMIT=$${shortCommit}" > .drone/version.env
+      - echo "VERSION_BASE=$${versionBase}" >> .drone/version.env
+      - echo "ALPHA_TAG=$${alphaTag}" >> .drone/version.env
+
+  - name: build-and-push-swiparr-image
+    image: gcr.io/kaniko-project/executor:v1.23.2-debug
+    depends_on:
+      - calculate-alpha-version
+    environment:
+      HOME: /kaniko
+      HARBOR_USERNAME:
+        from_secret: harbor_robot_username
+      HARBOR_PASSWORD:
+        from_secret: harbor_robot_password
+      HARBOR_CA_CERT:
+        from_secret: harbor_ca_cert
+    commands:
+      - case "$${RUN_MODE:-ci}" in publish|ci-and-publish) ;; *) echo "RUN_MODE=$${RUN_MODE:-ci}, skipping image publish."; exit 0;; esac
+      - . .drone/version.env
+      - if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi
+      - authValue="$(printf '%s:%s' "$${HARBOR_USERNAME}" "$${HARBOR_PASSWORD}" | base64 | tr -d '\n')"
+      - mkdir -p /kaniko/.docker
+      - printf '{"auths":{"harbor.internal.promethix.net":{"auth":"%s"}}}' "$${authValue}" > /kaniko/.docker/config.json
+      - if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi
+      - mkdir -p /kaniko/ssl/certs
+      - printf '%s' "$${HARBOR_CA_CERT}" > /kaniko/ssl/certs/harbor-ca.crt
+      - imageRef="harbor.internal.promethix.net/promethix/swiparr"
+      - 'echo "Publishing image: tag1=$${imageRef}:$${ALPHA_TAG}, tag2=$${imageRef}:alpha"'
+      - /kaniko/executor --context "$(pwd)" --dockerfile "$(pwd)/Dockerfile" --registry-certificate harbor.internal.promethix.net=/kaniko/ssl/certs/harbor-ca.crt --destination "$${imageRef}:$${ALPHA_TAG}" --destination "$${imageRef}:alpha"
+
+---
+kind: pipeline
+type: docker
+name: promote-staging
+
+trigger:
+  event:
+    - promote
+  target:
+    - staging
+
+steps:
+  - name: resolve-staging-tags
+    image: alpine/git:2.47.2
+    commands:
+      - mkdir -p .drone
+      - shortCommit="$(git rev-parse --short HEAD)"
+      - patchVersion="$${DRONE_BUILD_PARENT:-$${DRONE_BUILD_NUMBER}}"
+      - defaultAlphaTag="1.3.$${patchVersion}-alpha.$${shortCommit}"
+      - sourceAlphaTag="$${SOURCE_ALPHA_TAG:-$${defaultAlphaTag}}"
+      - versionBase="$(echo "$${sourceAlphaTag}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)-alpha\.[0-9a-f]+$/\1/')"
+      - if [ "$${versionBase}" = "$${sourceAlphaTag}" ]; then echo "Invalid SOURCE_ALPHA_TAG $${sourceAlphaTag}"; exit 1; fi
+      - rcNumber="$${RC_NUMBER:-1}"
+      - rcTag="$${versionBase}-rc$${rcNumber}"
+      - 'echo "Resolved staging promote tags: sourceAlphaTag=$${sourceAlphaTag}, versionBase=$${versionBase}, rcTag=$${rcTag}"'
+      - echo "SOURCE_ALPHA_TAG=$${sourceAlphaTag}" > .drone/promote-staging.env
+      - echo "RC_TAG=$${rcTag}" >> .drone/promote-staging.env
+
+  - name: retag-image-to-rc
+    image: quay.io/skopeo/stable:latest
+    depends_on:
+      - resolve-staging-tags
+    environment:
+      HARBOR_USERNAME:
+        from_secret: harbor_robot_username
+      HARBOR_PASSWORD:
+        from_secret: harbor_robot_password
+      HARBOR_CA_CERT:
+        from_secret: harbor_ca_cert
+    commands:
+      - . .drone/promote-staging.env
+      - if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi
+      - if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi
+      - mkdir -p /tmp/harbor-certs
+      - printf '%s' "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt
+      - imageRef="harbor.internal.promethix.net/promethix/swiparr"
+      - 'echo "Retagging image to RC: source=$${imageRef}:$${SOURCE_ALPHA_TAG}, destination=$${imageRef}:$${RC_TAG}"'
+      - skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${imageRef}:$${SOURCE_ALPHA_TAG}" "docker://$${imageRef}:$${RC_TAG}"
+
+---
+kind: pipeline
+type: docker
+name: promote-production
+
+trigger:
+  event:
+    - promote
+  target:
+    - production
+
+steps:
+  - name: resolve-production-tags
+    image: alpine/git:2.47.2
+    commands:
+      - mkdir -p .drone
+      - sourceRcTag="$${SOURCE_RC_TAG:-$${RC_TAG:-}}"
+      - if [ -z "$${sourceRcTag}" ]; then echo "SOURCE_RC_TAG is required for production promote (for example 1.3.120-rc1)."; exit 1; fi
+      - releaseTag="$(echo "$${sourceRcTag}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)-rc[0-9]+$/\1/')"
+      - if [ "$${releaseTag}" = "$${sourceRcTag}" ]; then echo "Invalid SOURCE_RC_TAG $${sourceRcTag}"; exit 1; fi
+      - 'echo "Resolved production promote tags: sourceRcTag=$${sourceRcTag}, releaseTag=$${releaseTag}"'
+      - echo "SOURCE_RC_TAG=$${sourceRcTag}" > .drone/promote-production.env
+      - echo "RELEASE_TAG=$${releaseTag}" >> .drone/promote-production.env
+
+  - name: retag-image-to-production
+    image: quay.io/skopeo/stable:latest
+    depends_on:
+      - resolve-production-tags
+    environment:
+      HARBOR_USERNAME:
+        from_secret: harbor_robot_username
+      HARBOR_PASSWORD:
+        from_secret: harbor_robot_password
+      HARBOR_CA_CERT:
+        from_secret: harbor_ca_cert
+    commands:
+      - . .drone/promote-production.env
+      - if [ -z "$${HARBOR_USERNAME}" ] || [ -z "$${HARBOR_PASSWORD}" ]; then echo "Harbor secrets are missing (harbor_robot_username / harbor_robot_password)"; exit 1; fi
+      - if [ -z "$${HARBOR_CA_CERT}" ]; then echo "Harbor CA secret is missing (harbor_ca_cert)"; exit 1; fi
+      - mkdir -p /tmp/harbor-certs
+      - printf '%s' "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt
+      - imageRef="harbor.internal.promethix.net/promethix/swiparr"
+      - 'echo "Retagging image to production: source=$${imageRef}:$${SOURCE_RC_TAG}, destination1=$${imageRef}:$${RELEASE_TAG}, destination2=$${imageRef}:latest"'
+      - skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${imageRef}:$${SOURCE_RC_TAG}" "docker://$${imageRef}:$${RELEASE_TAG}"
+      - skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${imageRef}:$${SOURCE_RC_TAG}" "docker://$${imageRef}:latest"
