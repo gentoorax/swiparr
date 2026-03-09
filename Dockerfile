@@ -1,4 +1,6 @@
 FROM node:24-alpine AS base
+# Pull the latest patched zlib from Alpine repos to address CVE-2026-22184.
+RUN apk add --no-cache --upgrade zlib
 
 # ---- deps for build (includes dev deps) ----
 FROM base AS deps
@@ -42,7 +44,7 @@ ENV HOSTNAME="0.0.0.0"
 ARG URL_BASE_PATH=""
 ENV URL_BASE_PATH=$URL_BASE_PATH
 
-RUN apk add --no-cache libc6-compat curl su-exec
+RUN apk add --no-cache --upgrade libc6-compat curl su-exec zlib
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
