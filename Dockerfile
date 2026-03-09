@@ -49,6 +49,11 @@ RUN apk add --no-cache --upgrade libc6-compat curl su-exec zlib
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Runtime does not require npm/npx. Remove them to shrink attack surface and
+# avoid shipping vulnerable npm CLI transitive dependencies (e.g. minimatch/tar).
+RUN rm -rf /usr/local/lib/node_modules/npm \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx
+
 # sqlite volume dir
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
