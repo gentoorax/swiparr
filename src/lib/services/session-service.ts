@@ -88,6 +88,7 @@ export class SessionService {
       sessionCode: code,
       externalUserId: user.Id,
       externalUserName: user.Name,
+      provider: user.provider || null,
       settings: settings ? JSON.stringify(settings) : null,
     });
 
@@ -125,10 +126,14 @@ export class SessionService {
       sessionCode: upperCode,
       externalUserId: user.Id,
       externalUserName: user.Name,
+      provider: user.provider || null,
       settings: settings ? JSON.stringify(settings) : null,
     }).onConflictDoUpdate({
       target: [sessionMembers.sessionCode, sessionMembers.externalUserId],
-      set: { settings: settings ? JSON.stringify(settings) : null }
+      set: {
+        provider: user.provider || null,
+        settings: settings ? JSON.stringify(settings) : null,
+      }
     });
 
     await EventService.emit(EVENT_TYPES.USER_JOINED, { sessionCode: upperCode, userName: user.Name, userId: user.Id });
@@ -167,6 +172,7 @@ export class SessionService {
         sessionCode: code,
         externalUserId: hostId,
         externalUserName: username,
+        provider: ProviderType.TMDB,
       });
 
       await EventService.emit(EVENT_TYPES.SESSION_UPDATED, code);
@@ -204,6 +210,7 @@ export class SessionService {
       sessionCode: code,
       externalUserId: guestId,
       externalUserName: username,
+      provider: user.provider || null,
     }).onConflictDoNothing();
 
     await EventService.emit(EVENT_TYPES.SESSION_UPDATED, code);
