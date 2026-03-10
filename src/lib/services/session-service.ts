@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
-import { eq, and, ne, count, sql, isNull } from "drizzle-orm";
+import { eq, and, ne, count, sql, isNull, or } from "drizzle-orm";
 import { db, sessions, sessionMembers, likes, hiddens, userProfiles } from "@/lib/db";
 import { EVENT_TYPES } from "@/lib/events";
 import { EventService } from "./event-service";
@@ -10,6 +10,7 @@ import { ConfigService } from "./config-service";
 import { logger } from "@/lib/logger";
 import { encryptValue, getGuestLendingSecret } from "@/lib/security/crypto";
 import { config } from "@/lib/config";
+import { MediaIdentityService } from "./media-identity-service";
 
 export class SessionService {
   private static normalizeServerUrl(value?: string): string | undefined {
@@ -104,11 +105,10 @@ export class SessionService {
     }
 
     if (!user.isGuest) {
-      if (existingSession.provider !== user.provider) {
-        throw new Error(`Provider mismatch: Session is ${existingSession.provider}, you are ${user.provider}`);
-      }
-
-      if ([ProviderType.JELLYFIN, ProviderType.EMBY, ProviderType.PLEX].includes(existingSession.provider as any)) {
+      if (
+        existingSession.provider === user.provider &&
+        [ProviderType.JELLYFIN, ProviderType.EMBY, ProviderType.PLEX].includes(existingSession.provider as any)
+      ) {
         const sessionConfig = existingSession.providerConfig ? JSON.parse(existingSession.providerConfig) : {};
         const userConfig = user.providerConfig || {};
         const sessionServerUrl = this.resolveServerUrl(existingSession.provider, sessionConfig);
@@ -224,7 +224,10 @@ export class SessionService {
     const userLikes = await db.query.likes.findMany({
       where: and(eq(likes.sessionCode, sessionCode), eq(likes.externalUserId, userId))
     });
-    const likedItemIds = userLikes.map((l: any) => l.externalId);
+    const likedItems = userLikes.map((l: any) => ({
+      externalId: l.externalId as string,
+      canonicalId: (l.canonicalId as string | null) || null,
+    }));
 
     await db.delete(sessionMembers).where(
       and(eq(sessionMembers.sessionCode, sessionCode), eq(sessionMembers.externalUserId, userId))
@@ -244,14 +247,14 @@ export class SessionService {
     if (remainingMembers.length === 0) {
       await db.delete(sessions).where(eq(sessions.code, sessionCode));
     } else {
-      if (likedItemIds.length > 0) {
+      if (likedItems.length > 0) {
         const currentSession = await db.query.sessions.findFirst({
           where: eq(sessions.code, sessionCode)
         });
         const settings = currentSession?.settings ? JSON.parse(currentSession.settings) : {};
         
-        for (const itemId of likedItemIds) {
-          await this.reEvaluateMatch(sessionCode, itemId, settings, remainingMembers);
+        for (const item of likedItems) {
+          await this.reEvaluateMatch(sessionCode, item, settings, remainingMembers);
         }
       }
       await EventService.emit(EVENT_TYPES.USER_LEFT, { sessionCode: sessionCode, userName: user.Name, userId });
@@ -304,20 +307,26 @@ export class SessionService {
   }
 
   static async addSwipe(user: SessionData["user"], sessionCode: string | null | undefined, itemId: string, direction: "left" | "right", item?: any) {
+    const canonicalId = MediaIdentityService.resolveCanonicalId(item || { Id: itemId });
+
     // Check for existing swipes to handle conversions and re-likes
     // Should be impossible by not showing the same card twice
     const [existingLike, existingHidden] = await Promise.all([
       db.query.likes.findFirst({
         where: and(
           eq(likes.externalUserId, user.Id),
-          eq(likes.externalId, itemId),
+          canonicalId
+            ? or(eq(likes.canonicalId, canonicalId), eq(likes.externalId, itemId))
+            : eq(likes.externalId, itemId),
           sessionCode ? eq(likes.sessionCode, sessionCode) : isNull(likes.sessionCode)
         )
       }),
       db.query.hiddens.findFirst({
         where: and(
           eq(hiddens.externalUserId, user.Id),
-          eq(hiddens.externalId, itemId),
+          canonicalId
+            ? or(eq(hiddens.canonicalId, canonicalId), eq(hiddens.externalId, itemId))
+            : eq(hiddens.externalId, itemId),
           sessionCode ? eq(hiddens.sessionCode, sessionCode) : isNull(hiddens.sessionCode)
         )
       })
@@ -355,7 +364,13 @@ export class SessionService {
           .leftJoin(userProfiles, eq(sessionMembers.externalUserId, userProfiles.userId))
           .where(eq(sessionMembers.sessionCode, sessionCode)),
           db.query.likes.findMany({
-            where: and(eq(likes.sessionCode, sessionCode), eq(likes.externalId, itemId), ne(likes.externalUserId, user.Id))
+            where: and(
+              eq(likes.sessionCode, sessionCode),
+              canonicalId
+                ? or(eq(likes.canonicalId, canonicalId), eq(likes.externalId, itemId))
+                : eq(likes.externalId, itemId),
+              ne(likes.externalUserId, user.Id)
+            )
           }),
           db.select({ value: sql<number>`count(distinct ${likes.externalId})` }).from(likes).where(and(eq(likes.sessionCode, sessionCode), eq(likes.isMatch, true)))
         ]);
@@ -375,11 +390,21 @@ export class SessionService {
         }
 
         if (isMatch) {
-          await db.update(likes).set({ isMatch: true }).where(and(eq(likes.sessionCode, sessionCode), eq(likes.externalId, itemId)));
+          await db.update(likes).set({ isMatch: true }).where(and(
+            eq(likes.sessionCode, sessionCode),
+            canonicalId
+              ? or(eq(likes.canonicalId, canonicalId), eq(likes.externalId, itemId))
+              : eq(likes.externalId, itemId)
+          ));
           await EventService.emit(EVENT_TYPES.MATCH_FOUND, { sessionCode, itemId, swiperId: user.Id, itemName: item?.Name || "a movie" });
           
           const allItemLikes = await db.query.likes.findMany({
-            where: and(eq(likes.sessionCode, sessionCode), eq(likes.externalId, itemId))
+            where: and(
+              eq(likes.sessionCode, sessionCode),
+              canonicalId
+                ? or(eq(likes.canonicalId, canonicalId), eq(likes.externalId, itemId))
+                : eq(likes.externalId, itemId)
+            )
           });
           likedBy = allItemLikes.map((l: any) => {
             const member = members.find((m: any) => m.externalUserId === l.externalUserId);
@@ -407,13 +432,15 @@ export class SessionService {
         // Update existing like to move it to the top (fresh like)
         await db.update(likes).set({ 
           createdAt: sql`CURRENT_TIMESTAMP`,
-          isMatch: isMatch
+          isMatch: isMatch,
+          canonicalId: canonicalId || existingLike.canonicalId || null,
         }).where(eq(likes.id, existingLike.id));
       } else {
         try {
           await db.insert(likes).values({
             externalUserId: user.Id,
             externalId: itemId,
+            canonicalId: canonicalId,
             sessionCode: sessionCode || null,
             isMatch: isMatch,
           });
@@ -438,11 +465,24 @@ export class SessionService {
         if (sessionCode && existingLike.isMatch) {
           const [s, remainingLikes, members] = await Promise.all([
             db.query.sessions.findFirst({ where: eq(sessions.code, sessionCode) }),
-            db.query.likes.findMany({ where: and(eq(likes.sessionCode, sessionCode), eq(likes.externalId, itemId)) }),
+            db.query.likes.findMany({
+              where: and(
+                eq(likes.sessionCode, sessionCode),
+                canonicalId
+                  ? or(eq(likes.canonicalId, canonicalId), eq(likes.externalId, itemId))
+                  : eq(likes.externalId, itemId)
+              )
+            }),
             db.query.sessionMembers.findMany({ where: eq(sessionMembers.sessionCode, sessionCode) })
           ]);
           const sessionSettings: SessionSettings | null = s?.settings ? JSON.parse(s.settings) : null;
-          await this.reEvaluateMatch(sessionCode, itemId, sessionSettings, members, remainingLikes);
+          await this.reEvaluateMatch(
+            sessionCode,
+            { externalId: itemId, canonicalId },
+            sessionSettings,
+            members,
+            remainingLikes
+          );
           await EventService.emit(EVENT_TYPES.MATCH_REMOVED, { sessionCode, itemId, userId: user.Id });
         }
       }
@@ -461,6 +501,7 @@ export class SessionService {
           await db.insert(hiddens).values({
             externalUserId: user.Id,
             externalId: itemId,
+            canonicalId: canonicalId,
             sessionCode: sessionCode || null,
           });
         } catch (e: any) {
@@ -476,10 +517,21 @@ export class SessionService {
   }
 
   static async deleteSwipe(user: SessionData["user"], itemId: string, sessionCode?: string | null) {
+    const existingLike = await db.query.likes.findFirst({
+      where: and(
+        eq(likes.externalUserId, user.Id),
+        eq(likes.externalId, itemId),
+        sessionCode ? eq(likes.sessionCode, sessionCode) : isNull(likes.sessionCode)
+      )
+    });
+    const canonicalId = existingLike?.canonicalId || null;
+
     await db.delete(likes).where(
       and(
         eq(likes.externalUserId, user.Id), 
-        eq(likes.externalId, itemId),
+        canonicalId
+          ? or(eq(likes.canonicalId, canonicalId), eq(likes.externalId, itemId))
+          : eq(likes.externalId, itemId),
         sessionCode ? eq(likes.sessionCode, sessionCode) : isNull(likes.sessionCode)
       )
     );
@@ -487,22 +539,51 @@ export class SessionService {
     if (sessionCode) {
       const [s, remainingLikes, members] = await Promise.all([
         db.query.sessions.findFirst({ where: eq(sessions.code, sessionCode) }),
-        db.query.likes.findMany({ where: and(eq(likes.sessionCode, sessionCode), eq(likes.externalId, itemId)) }),
+        db.query.likes.findMany({
+          where: and(
+            eq(likes.sessionCode, sessionCode),
+            canonicalId
+              ? or(eq(likes.canonicalId, canonicalId), eq(likes.externalId, itemId))
+              : eq(likes.externalId, itemId)
+          )
+        }),
         db.query.sessionMembers.findMany({ where: eq(sessionMembers.sessionCode, sessionCode) })
       ]);
 
       const settings: SessionSettings | null = s?.settings ? JSON.parse(s.settings) : null;
-      await this.reEvaluateMatch(sessionCode, itemId, settings, members, remainingLikes);
+      await this.reEvaluateMatch(
+        sessionCode,
+        { externalId: itemId, canonicalId },
+        settings,
+        members,
+        remainingLikes
+      );
       
       await EventService.emit(EVENT_TYPES.MATCH_REMOVED, { sessionCode, itemId, userId: user.Id });
     }
 
-    await db.delete(hiddens).where(and(eq(hiddens.externalUserId, user.Id), eq(hiddens.externalId, itemId)));
+    await db.delete(hiddens).where(and(
+      eq(hiddens.externalUserId, user.Id),
+      canonicalId
+        ? or(eq(hiddens.canonicalId, canonicalId), eq(hiddens.externalId, itemId))
+        : eq(hiddens.externalId, itemId)
+    ));
   }
 
-  private static async reEvaluateMatch(sessionCode: string, itemId: string, settings: any, members: any[], existingLikes?: any[]) {
+  private static async reEvaluateMatch(
+    sessionCode: string,
+    itemRef: { externalId: string; canonicalId: string | null },
+    settings: any,
+    members: any[],
+    existingLikes?: any[]
+  ) {
     const itemLikes = existingLikes || await db.query.likes.findMany({
-      where: and(eq(likes.sessionCode, sessionCode), eq(likes.externalId, itemId))
+      where: and(
+        eq(likes.sessionCode, sessionCode),
+        itemRef.canonicalId
+          ? or(eq(likes.canonicalId, itemRef.canonicalId), eq(likes.externalId, itemRef.externalId))
+          : eq(likes.externalId, itemRef.externalId)
+      )
     });
 
     const matchStrategy = settings?.matchStrategy || "atLeastTwo";
@@ -516,7 +597,12 @@ export class SessionService {
     }
 
     if (!stillAMatch) {
-      await db.update(likes).set({ isMatch: false }).where(and(eq(likes.sessionCode, sessionCode), eq(likes.externalId, itemId)));
+      await db.update(likes).set({ isMatch: false }).where(and(
+        eq(likes.sessionCode, sessionCode),
+        itemRef.canonicalId
+          ? or(eq(likes.canonicalId, itemRef.canonicalId), eq(likes.externalId, itemRef.externalId))
+          : eq(likes.externalId, itemRef.externalId)
+      ));
     }
   }
 }

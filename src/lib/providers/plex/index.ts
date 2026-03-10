@@ -371,6 +371,8 @@ export class PlexProvider implements MediaProvider {
     })) || [];
 
     const watchlistGuid = item.guid || (item.Guid?.[0]?.id ?? undefined);
+    const tmdbFromGuid = typeof watchlistGuid === "string" ? (watchlistGuid.match(/tmdb[:/]+(\d+)/i)?.[1] || undefined) : undefined;
+    const imdbFromGuid = typeof watchlistGuid === "string" ? (watchlistGuid.match(/imdb[:/]+(tt\d+)/i)?.[1] || undefined) : undefined;
     const isWatchlisted = (item.userState?.watchlistedAt ?? 0) > 0;
     const isPlayed = (item.viewCount ?? 0) > 0 || (item.viewOffset ?? 0) > 0 || (item.lastViewedAt ?? 0) > 0;
 
@@ -385,6 +387,10 @@ export class PlexProvider implements MediaProvider {
     return {
       Id: item.ratingKey,
       Guid: watchlistGuid,
+      ProviderIds: {
+        ...(tmdbFromGuid ? { Tmdb: tmdbFromGuid } : {}),
+        ...(imdbFromGuid ? { Imdb: imdbFromGuid } : {}),
+      },
       Name: item.title,
       OriginalTitle: item.originalTitle,
       Language: language,

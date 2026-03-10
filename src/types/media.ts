@@ -14,6 +14,11 @@ export interface MediaStudio {
 export interface MediaItem {
   Id: string;
   Guid?: string;
+  ProviderIds?: {
+    Tmdb?: string;
+    Imdb?: string;
+    Tvdb?: string;
+  };
   Name: string;
   OriginalTitle?: string;
   Language?: string;

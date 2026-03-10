@@ -25,6 +25,7 @@ export type NewSession = InferInsertModel<typeof sessions>;
 export const likes = sqliteTable("Like", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   externalId: text("externalId").notNull(),
+  canonicalId: text("canonicalId"),
   externalUserId: text("externalUserId").notNull(),
   isMatch: integer("isMatch", { mode: "boolean" }).notNull().default(false),
   sessionCode: text("sessionCode").references(() => sessions.code, { onDelete: "cascade" }),
@@ -36,6 +37,7 @@ export const likes = sqliteTable("Like", {
     index("Like_externalUserId_createdAt_idx").on(table.externalUserId, table.createdAt),
     index("Like_sessionCode_externalUserId_idx").on(table.sessionCode, table.externalUserId),
     index("Like_sessionCode_externalId_idx").on(table.sessionCode, table.externalId),
+    index("Like_sessionCode_canonicalId_idx").on(table.sessionCode, table.canonicalId),
   ];
 });
 
@@ -45,6 +47,7 @@ export type NewLike = InferInsertModel<typeof likes>;
 export const hiddens = sqliteTable("Hidden", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   externalId: text("externalId").notNull(),
+  canonicalId: text("canonicalId"),
   externalUserId: text("externalUserId").notNull(),
   sessionCode: text("sessionCode").references(() => sessions.code, { onDelete: "cascade" }),
 }, (table) => {
@@ -53,6 +56,7 @@ export const hiddens = sqliteTable("Hidden", {
     uniqueIndex("Hidden_solo_key").on(table.externalId, table.externalUserId).where(sql`sessionCode IS NULL`),
     index("Hidden_sessionCode_externalUserId_idx").on(table.sessionCode, table.externalUserId),
     index("Hidden_externalUserId_sessionCode_idx").on(table.externalUserId, table.sessionCode),
+    index("Hidden_sessionCode_canonicalId_idx").on(table.sessionCode, table.canonicalId),
   ];
 });
 

@@ -8,6 +8,7 @@ import { eq, and, isNull, or } from "drizzle-orm";
 import { AuthService } from "@/lib/services/auth-service";
 import { getMediaProvider } from "@/lib/providers/factory";
 import { handleApiError } from "@/lib/api-utils";
+import { MediaIdentityService } from "@/lib/services/media-identity-service";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const cookieStore = await cookies();
@@ -30,9 +31,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const auth = await AuthService.getEffectiveCredentials(session);
     const provider = getMediaProvider(auth.provider);
     const item = await provider.getItemDetails(id, auth, { includeUserState });
+    const canonicalId = MediaIdentityService.resolveCanonicalId(item || { Id: id });
 
     const itemLikes = await db.select().from(likes).where(and(
-        eq(likes.externalId, id),
+        canonicalId
+            ? or(eq(likes.canonicalId, canonicalId), eq(likes.externalId, id))
+            : eq(likes.externalId, id),
         targetSessionCode 
             ? eq(likes.sessionCode, targetSessionCode)
             : isNull(likes.sessionCode)
