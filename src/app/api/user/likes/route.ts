@@ -39,15 +39,33 @@ export async function GET(request: NextRequest) {
 
     if (likesResult.length === 0) return NextResponse.json([]);
 
-    const ids = [...new Set(likesResult.map((l: Like) => l.externalId))] as string[];
-    
+    const canonicalGroups = new Map<string, { externalIds: Set<string>; likeRows: Like[] }>();
+    for (const like of likesResult) {
+        const canonicalKey = like.canonicalId || `external:${like.externalId}`;
+        const existing = canonicalGroups.get(canonicalKey);
+        if (existing) {
+            existing.externalIds.add(like.externalId);
+            existing.likeRows.push(like);
+        } else {
+            canonicalGroups.set(canonicalKey, {
+                externalIds: new Set([like.externalId]),
+                likeRows: [like],
+            });
+        }
+    }
+
     const itemsMap = new Map<string, MediaItem>();
-    await Promise.all(ids.map(async (id: string) => {
-        try {
-            const item = await provider.getItemDetails(id, auth, { includeUserState: true });
-            if (item) itemsMap.set(id, item);
-        } catch (error) {
-            logger.error(`Failed to fetch details for ${id}`, error);
+    await Promise.all(Array.from(canonicalGroups.entries()).map(async ([canonicalKey, group]) => {
+        for (const externalId of group.externalIds) {
+            try {
+                const item = await provider.getItemDetails(externalId, auth, { includeUserState: true });
+                if (item) {
+                    itemsMap.set(canonicalKey, item);
+                    return;
+                }
+            } catch (error) {
+                logger.error(`Failed to fetch details for ${externalId}`, error);
+            }
         }
     }));
 
@@ -57,8 +75,7 @@ export async function GET(request: NextRequest) {
 
     if (sessionCodes.length > 0) {
         allRelatedLikes = await db.select().from(likesTable).where(and(
-            inArray(likesTable.sessionCode, sessionCodes as string[]),
-            inArray(likesTable.externalId, Array.from(itemsMap.keys()))
+            inArray(likesTable.sessionCode, sessionCodes as string[])
         ));
         members = await db.select({
             externalUserId: sessionMembers.externalUserId,
@@ -75,10 +92,14 @@ export async function GET(request: NextRequest) {
     }
 
     let merged: MergedLike[] = likesResult.map((likeData: Like) => {
-        const item = itemsMap.get(likeData.externalId);
+        const canonicalKey = likeData.canonicalId || `external:${likeData.externalId}`;
+        const item = itemsMap.get(canonicalKey);
         if (!item) return null;
 
-        const itemLikes = allRelatedLikes.filter((l: any) => l.externalId === item.Id && l.sessionCode === likeData.sessionCode);
+        const itemLikes = allRelatedLikes.filter((l: any) => {
+            const relatedCanonical = l.canonicalId || `external:${l.externalId}`;
+            return relatedCanonical === canonicalKey && l.sessionCode === likeData.sessionCode;
+        });
         
         return {
             ...item,
@@ -136,6 +157,15 @@ export async function DELETE(request: NextRequest) {
     : (session.sessionCode || null);
 
   try {
+    const canonicalLike = await db.select().from(likesTable).where(
+        and(
+            eq(likesTable.externalUserId, session.user.Id),
+            eq(likesTable.externalId, itemId),
+            targetSessionCode ? eq(likesTable.sessionCode, targetSessionCode) : isNull(likesTable.sessionCode)
+        )
+    ).then((rows: any[]) => rows[0]);
+    const canonicalId = canonicalLike?.canonicalId || null;
+
     await db.delete(likesTable).where(
         and(
             eq(likesTable.externalUserId, session.user.Id),
@@ -147,17 +177,18 @@ export async function DELETE(request: NextRequest) {
     if (targetSessionCode) {
         const remainingLikes = await db.select().from(likesTable).where(and(
             eq(likesTable.sessionCode, targetSessionCode),
-            eq(likesTable.externalId, itemId)
+            canonicalId
+                ? and(eq(likesTable.sessionCode, targetSessionCode), eq(likesTable.canonicalId, canonicalId))
+                : eq(likesTable.externalId, itemId)
         ));
 
         if (remainingLikes.length < 2) {
             await db.update(likesTable)
                 .set({ isMatch: false })
                 .where(
-                    and(
-                        eq(likesTable.sessionCode, targetSessionCode),
-                        eq(likesTable.externalId, itemId)
-                    )
+                    canonicalId
+                        ? and(eq(likesTable.sessionCode, targetSessionCode), eq(likesTable.canonicalId, canonicalId))
+                        : and(eq(likesTable.sessionCode, targetSessionCode), eq(likesTable.externalId, itemId))
                 );
         }
 

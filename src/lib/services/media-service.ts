@@ -17,7 +17,15 @@ interface ExcludedMediaRefs {
   canonicalIds: Set<string>;
 }
 
+interface CanonicalOrderCacheEntry {
+  orderedKeys: string[];
+  createdAt: number;
+}
+
 export class MediaService {
+  private static readonly CANONICAL_ORDER_CACHE_TTL_MS = 20 * 60 * 1000;
+  private static canonicalOrderCache = new Map<string, CanonicalOrderCacheEntry>();
+
   static async getMediaItems(session: SessionData, page: number, limit: number, searchTerm?: string, overrideFilters?: Filters) {
     logger.debug(`getMediaItems: page=${page}, limit=${limit}, searchTerm=${searchTerm}`, { overrideFilters });
     const auth = await AuthService.getEffectiveCredentials(session);
@@ -436,6 +444,24 @@ export class MediaService {
     }
 
     const sortBy = sessionFilters?.sortBy || (auth.provider === ProviderType.TMDB ? "Popular" : "Trending");
+    const filtersHash = this.generateFiltersHash({
+      deckMode: "canonical-session",
+      libraries: includedLibraries,
+      genres: sessionFilters?.genres,
+      excludedGenres: sessionFilters?.excludedGenres,
+      yearRange: sessionFilters?.yearRange,
+      officialRatings: sessionFilters?.officialRatings,
+      excludedOfficialRatings: sessionFilters?.excludedOfficialRatings,
+      minCommunityRating: sessionFilters?.minCommunityRating,
+      runtimeRange: sessionFilters?.runtimeRange,
+      watchProviders,
+      watchRegion,
+      themes: sessionFilters?.themes,
+      excludedThemes: sessionFilters?.excludedThemes,
+      tmdbLanguages: sessionFilters?.tmdbLanguages,
+      unplayedOnly: sessionFilters?.unplayedOnly,
+      sortBy,
+    });
     const filterKey = {
       deckMode: "canonical-session",
       libraries: includedLibraries,
@@ -475,11 +501,18 @@ export class MediaService {
         allItems.filter((item): item is MediaItem => item != null && item.Id != null),
         sessionFilters
       );
-      const dedupedItems = this.dedupeItemsByCanonicalIdentity(filteredItems);
-      const orderedItems = this.orderCanonicalSessionItems(
-        dedupedItems,
+      const canonicalItems = this.buildCanonicalItemMap(filteredItems);
+      const sharedOrder = this.getOrBuildCanonicalSessionOrder(
+        sessionCode,
+        filtersHash,
+        canonicalItems,
         session.randomSeed || sessionCode,
-        this.generateFiltersHash(filterKey),
+        sortBy
+      );
+      const orderedItems = this.materializeCanonicalSessionOrder(
+        canonicalItems,
+        sharedOrder,
+        session.randomSeed || sessionCode,
         sortBy
       );
 
@@ -526,6 +559,35 @@ export class MediaService {
     return Math.abs(hash).toString(36);
   }
 
+  private static getOrBuildCanonicalSessionOrder(
+    sessionCode: string,
+    filtersHash: string,
+    canonicalItems: Map<string, MediaItem>,
+    sessionSeed: string,
+    sortBy: string
+  ): string[] {
+    const cacheKey = `${sessionCode}:${filtersHash}`;
+    const cached = this.canonicalOrderCache.get(cacheKey);
+
+    if (cached && (Date.now() - cached.createdAt) <= this.CANONICAL_ORDER_CACHE_TTL_MS) {
+      return cached.orderedKeys;
+    }
+
+    const orderedKeys = this.orderCanonicalSessionItems(
+      Array.from(canonicalItems.values()),
+      sessionSeed,
+      filtersHash,
+      sortBy
+    ).map((item) => this.getCanonicalDeckIdentityKey(item));
+
+    this.canonicalOrderCache.set(cacheKey, {
+      orderedKeys,
+      createdAt: Date.now(),
+    });
+
+    return orderedKeys;
+  }
+
   private static async isCrossProviderSession(sessionCode: string, currentProvider?: string): Promise<boolean> {
     const [session, members] = await Promise.all([
       db.query.sessions.findFirst({
@@ -553,7 +615,7 @@ export class MediaService {
     return providers.size > 1;
   }
 
-  private static dedupeItemsByCanonicalIdentity(items: MediaItem[]): MediaItem[] {
+  private static buildCanonicalItemMap(items: MediaItem[]): Map<string, MediaItem> {
     const deduped = new Map<string, MediaItem>();
 
     for (const item of items) {
@@ -566,7 +628,7 @@ export class MediaService {
       }
     }
 
-    return Array.from(deduped.values());
+    return deduped;
   }
 
   private static shouldReplaceCanonicalDeckItem(current: MediaItem, candidate: MediaItem): boolean {
@@ -598,6 +660,36 @@ export class MediaService {
 
     ordered.sort((left, right) => this.compareCanonicalSessionItems(left, right, sortBy, sessionSeed));
     return ordered;
+  }
+
+  private static materializeCanonicalSessionOrder(
+    canonicalItems: Map<string, MediaItem>,
+    orderedKeys: string[],
+    sessionSeed: string,
+    sortBy: string
+  ): MediaItem[] {
+    const orderedItems: MediaItem[] = [];
+    const remaining = new Map(canonicalItems);
+
+    for (const key of orderedKeys) {
+      const item = remaining.get(key);
+      if (!item) continue;
+      orderedItems.push(item);
+      remaining.delete(key);
+    }
+
+    if (remaining.size === 0) {
+      return orderedItems;
+    }
+
+    const overflow = this.orderCanonicalSessionItems(
+      Array.from(remaining.values()),
+      sessionSeed,
+      `overflow:${sortBy}`,
+      sortBy
+    );
+
+    return [...orderedItems, ...overflow];
   }
 
   private static compareCanonicalSessionItems(
@@ -667,9 +759,17 @@ export class MediaService {
   }
 
   private static getCanonicalDeckIdentityKey(item: MediaItem): string {
-    return MediaIdentityService.resolveCanonicalId(item)
-      || `title:${this.normalizeDeckTitle(item.Name || "")}:${item.ProductionYear || 0}`
-      || `external:${item.Id}`;
+    const canonicalId = MediaIdentityService.resolveCanonicalId(item);
+    if (canonicalId) {
+      return canonicalId;
+    }
+
+    const normalizedTitle = this.normalizeDeckTitle(item.Name || "");
+    if (normalizedTitle) {
+      return `title:${normalizedTitle}:${item.ProductionYear || 0}`;
+    }
+
+    return `external:${item.Id}`;
   }
 
   private static isExcludedFromCanonicalDeck(item: MediaItem, excludeRefs: ExcludedMediaRefs): boolean {

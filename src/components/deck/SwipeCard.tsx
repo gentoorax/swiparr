@@ -96,7 +96,7 @@ export const SwipeCard = memo(forwardRef<TinderCardHandle, SwipeCardProps>(
                     : `/api/media/image/${item.Id}`
                   }
                   alt={item.Name}
-                  externalId={item.Id}
+                  externalId={isFront ? item.Id : undefined}
                   blurDataURL={item.BlurDataURL}
                   loading={index == 0 ? 'eager' : undefined}
                   className="h-full w-full object-cover rounded-3xl"
