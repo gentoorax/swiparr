@@ -46,6 +46,11 @@ export const JellyfinItemSchema = z.object({
     Language: z.string().optional(),
     IsDefault: z.boolean().optional(),
   })).optional(),
+  ProviderIds: z.object({
+    Tmdb: z.string().optional(),
+    Imdb: z.string().optional(),
+    Tvdb: z.string().optional(),
+  }).optional(),
   PreferredMetadataLanguage: z.string().optional(),
   ProductionLocations: z.array(z.string()).optional(),
   ImageTags: z.record(z.string(), z.string()).optional(),

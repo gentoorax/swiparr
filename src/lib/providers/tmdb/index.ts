@@ -316,6 +316,7 @@ export class TmdbProvider implements MediaProvider {
   private mapMovieToMediaItem(movie: any, genreMap?: Map<string, string>): MediaItem {
     return {
       Id: movie.id.toString(),
+      ProviderIds: { Tmdb: movie.id.toString() },
       Name: movie.title,
       Overview: movie.overview,
       Language: movie.original_language,
@@ -359,6 +360,7 @@ export class TmdbProvider implements MediaProvider {
 
     return {
       Id: movie.id.toString(),
+      ProviderIds: { Tmdb: movie.id.toString() },
       Name: movie.title,
       OriginalTitle: movie.original_title,
       Overview: movie.overview,

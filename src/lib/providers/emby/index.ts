@@ -64,7 +64,7 @@ export class EmbyProvider implements MediaProvider {
     const params: Record<string, any> = {
       IncludeItemTypes: "Movie",
       Recursive: true,
-      Fields: "Overview,RunTimeTicks,ProductionYear,CommunityRating,OfficialRating,Genres,ImageTags,BackdropImageTags,UserData,PreferredMetadataLanguage,ProductionLocations,MediaStreams",
+      Fields: "Overview,RunTimeTicks,ProductionYear,CommunityRating,OfficialRating,Genres,ImageTags,BackdropImageTags,UserData,PreferredMetadataLanguage,ProductionLocations,MediaStreams,ProviderIds",
       SortBy: filters.sortBy === "Random" ? "Random" : 
               filters.sortBy === "Trending" ? "CommunityRating" :
               filters.sortBy === "Popular" ? "CommunityRating" :
@@ -265,6 +265,12 @@ export class EmbyProvider implements MediaProvider {
   private mapToMediaItem(item: any): MediaItem {
     return {
       Id: item.Id,
+      Guid: item.ProviderIds?.Tmdb ? `tmdb://${item.ProviderIds.Tmdb}` : (item.ProviderIds?.Imdb ? `imdb://${item.ProviderIds.Imdb}` : undefined),
+      ProviderIds: item.ProviderIds ? {
+        Tmdb: item.ProviderIds.Tmdb,
+        Imdb: item.ProviderIds.Imdb,
+        Tvdb: item.ProviderIds.Tvdb,
+      } : undefined,
       Name: item.Name,
       OriginalTitle: item.OriginalTitle,
       Language: this.getItemLanguage(item),
