@@ -19,7 +19,7 @@ steps:
       - install
     commands:
       - npm install --no-save eslint@9.38.0 eslint-config-next@16.1.6
-      - npx eslint . --max-warnings=0 || { echo "Lint violations detected; continuing (non-blocking)"; exit 0; }
+      - npx eslint . --max-warnings=0
 
   - name: build
     image: node:24-alpine
@@ -51,7 +51,7 @@ steps:
     commands:
       - if [ "$${RUN_MODE:-ci}" = "publish" ]; then echo "RUN_MODE=publish, skipping CI lint."; exit 0; fi
       - npm install --no-save eslint@9.38.0 eslint-config-next@16.1.6
-      - npx eslint . --max-warnings=0 || { echo "Lint violations detected; continuing (non-blocking)"; exit 0; }
+      - npx eslint . --max-warnings=0
 
   - name: build
     image: node:24-alpine
