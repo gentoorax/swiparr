@@ -370,9 +370,14 @@ export class PlexProvider implements MediaProvider {
       PrimaryImageTag: r.thumb,
     })) || [];
 
-    const watchlistGuid = item.guid || (item.Guid?.[0]?.id ?? undefined);
-    const tmdbFromGuid = typeof watchlistGuid === "string" ? (watchlistGuid.match(/tmdb[:/]+(\d+)/i)?.[1] || undefined) : undefined;
-    const imdbFromGuid = typeof watchlistGuid === "string" ? (watchlistGuid.match(/imdb[:/]+(tt\d+)/i)?.[1] || undefined) : undefined;
+    const guidCandidates = [
+      ...(typeof item.guid === "string" ? [item.guid] : []),
+      ...((Array.isArray(item.Guid) ? item.Guid.map((entry: any) => entry?.id).filter(Boolean) : []) as string[]),
+    ];
+    const tmdbFromGuid = this.extractGuidValue(guidCandidates, /tmdb[:/]+(\d+)/i);
+    const imdbFromGuid = this.extractGuidValue(guidCandidates, /imdb[:/]+(tt\d+)/i)?.toLowerCase();
+    const tvdbFromGuid = this.extractGuidValue(guidCandidates, /tvdb[:/]+(\d+)/i);
+    const canonicalGuid = guidCandidates.find((guid) => /(?:tmdb|imdb|tvdb)[:/]+/i.test(guid)) || guidCandidates[0];
     const isWatchlisted = (item.userState?.watchlistedAt ?? 0) > 0;
     const isPlayed = (item.viewCount ?? 0) > 0 || (item.viewOffset ?? 0) > 0 || (item.lastViewedAt ?? 0) > 0;
 
@@ -386,10 +391,11 @@ export class PlexProvider implements MediaProvider {
 
     return {
       Id: item.ratingKey,
-      Guid: watchlistGuid,
+      Guid: canonicalGuid,
       ProviderIds: {
         ...(tmdbFromGuid ? { Tmdb: tmdbFromGuid } : {}),
         ...(imdbFromGuid ? { Imdb: imdbFromGuid } : {}),
+        ...(tvdbFromGuid ? { Tvdb: tvdbFromGuid } : {}),
       },
       Name: item.title,
       OriginalTitle: item.originalTitle,
@@ -416,6 +422,17 @@ export class PlexProvider implements MediaProvider {
           }
         : undefined,
     };
+  }
+
+  private extractGuidValue(guidCandidates: string[], pattern: RegExp): string | undefined {
+    for (const guid of guidCandidates) {
+      const match = guid.match(pattern);
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+
+    return undefined;
   }
 
   private async resolveGenreIds(genres: string[], auth?: AuthContext): Promise<string[]> {
