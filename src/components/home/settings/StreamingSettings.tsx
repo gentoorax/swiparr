@@ -116,13 +116,6 @@ export function StreamingSettings() {
         }
     }, [settings, regions, availableProviders, availableProviderIds, hasInitialized]);
 
-    useEffect(() => {
-        if (selectedRegion && availableProviders.length > 0 && hasInitialized) {
-            const availableSet = new Set(availableProviderIds);
-            setSelectedProviders(prev => prev.filter(pId => availableSet.has(pId)));
-        }
-    }, [selectedRegion, availableProviders.length, availableProviderIds, hasInitialized]);
-
     const toggleProvider = (id: string) => {
         setSelectedProviders(prev =>
             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]

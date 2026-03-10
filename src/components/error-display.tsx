@@ -14,13 +14,13 @@ interface ErrorDisplayProps {
 }
 
 export default function ErrorDisplay({ error, reset, type = 'generic' }: ErrorDisplayProps) {
-  const [isOffline, setIsOffline] = useState(false);
+  const [isOffline, setIsOffline] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return !window.navigator.onLine;
+  });
   const { basePath } = useRuntimeConfig();
 
   useEffect(() => {
-    // Check initial state
-    setIsOffline(!window.navigator.onLine);
-
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 

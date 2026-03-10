@@ -13,7 +13,7 @@ import { apiClient } from "@/lib/api-client";
 import { getErrorMessage } from "@/lib/utils";
 import { useRuntimeConfig } from "@/lib/runtime-config";
 import { Button } from "../ui/button";
-import { useState, Suspense, lazy } from "react";
+import { useState } from "react";
 import { UserGuide } from "./UserGuide";
 import {
     AlertDialog,
@@ -24,7 +24,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
@@ -36,7 +35,6 @@ import { AdminSettings } from "./settings/AdminSettings";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { StreamingSettings } from "./settings/StreamingSettings";
 import { DangerZone } from "./settings/DangerZone";
-import { useSession } from "@/hooks/api";
 import { Footer } from "../Footer";
 
 
@@ -49,8 +47,7 @@ export function SettingsSidebar() {
 
     useHotkeys("s, ,", () => setOpen(prev => !prev), []);
 
-    const { basePath, provider: runtimeProvider, capabilities } = useRuntimeConfig();
-    const { data: sessionStatus } = useSession();
+    const { basePath, capabilities } = useRuntimeConfig();
 
     const handleLogout = async () => {
         try {

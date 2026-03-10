@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { VirtuosoGrid } from "react-virtuoso";
 import {
   Drawer,
@@ -105,45 +105,43 @@ export function FilterDrawer({ open, onOpenChange, currentFilters, onSave }: Fil
     ];
   }, [defaultSort]);
 
-  useEffect(() => {
-    if (open) {
-      setSelectedGenres(currentFilters?.genres || []);
-      setSelectedRatings(currentFilters?.officialRatings || []);
-      setSelectedWatchProviders(currentFilters?.watchProviders || availableWatchProviderIds);
-      setSelectedThemes(currentFilters?.themes || []);
-      if (currentFilters?.excludedGenres && currentFilters.excludedGenres.length > 0) {
-        setExcludedGenres(currentFilters.excludedGenres);
-        setSelectedGenres([]);
-        setGenreFilterMode("exclude");
-      } else {
-        setExcludedGenres([]);
-        setGenreFilterMode("include");
-      }
-      if (currentFilters?.excludedOfficialRatings && currentFilters.excludedOfficialRatings.length > 0) {
-        setExcludedRatings(currentFilters.excludedOfficialRatings);
-        setSelectedRatings([]);
-        setRatingFilterMode("exclude");
-      } else {
-        setExcludedRatings([]);
-        setRatingFilterMode("include");
-      }
-      if (currentFilters?.excludedThemes && currentFilters.excludedThemes.length > 0) {
-        setExcludedThemes(currentFilters.excludedThemes);
-        setSelectedThemes([]);
-        setThemeFilterMode("exclude");
-      } else {
-        setExcludedThemes([]);
-        setThemeFilterMode("include");
-      }
-      setSelectedLanguages(currentFilters?.tmdbLanguages ?? DEFAULT_LANGUAGES);
-      setSortBy(currentFilters?.sortBy || defaultSort);
-      setUnplayedOnly(currentFilters?.unplayedOnly ?? true);
-      setYearRange(currentFilters?.yearRange || [minYearLimit, maxYearLimit]);
-      setRuntimeRange(currentFilters?.runtimeRange || [0, 240]);
-      setMinRating(currentFilters?.minCommunityRating || 0);
-      setProviderSearch("");
+  const initializeFromCurrentFilters = useCallback(() => {
+    setSelectedGenres(currentFilters?.genres || []);
+    setSelectedRatings(currentFilters?.officialRatings || []);
+    setSelectedWatchProviders(currentFilters?.watchProviders || availableWatchProviderIds);
+    setSelectedThemes(currentFilters?.themes || []);
+    if (currentFilters?.excludedGenres && currentFilters.excludedGenres.length > 0) {
+      setExcludedGenres(currentFilters.excludedGenres);
+      setSelectedGenres([]);
+      setGenreFilterMode("exclude");
+    } else {
+      setExcludedGenres([]);
+      setGenreFilterMode("include");
     }
-  }, [open, currentFilters, availableWatchProviderIds, minYearLimit, maxYearLimit, defaultSort]);
+    if (currentFilters?.excludedOfficialRatings && currentFilters.excludedOfficialRatings.length > 0) {
+      setExcludedRatings(currentFilters.excludedOfficialRatings);
+      setSelectedRatings([]);
+      setRatingFilterMode("exclude");
+    } else {
+      setExcludedRatings([]);
+      setRatingFilterMode("include");
+    }
+    if (currentFilters?.excludedThemes && currentFilters.excludedThemes.length > 0) {
+      setExcludedThemes(currentFilters.excludedThemes);
+      setSelectedThemes([]);
+      setThemeFilterMode("exclude");
+    } else {
+      setExcludedThemes([]);
+      setThemeFilterMode("include");
+    }
+    setSelectedLanguages(currentFilters?.tmdbLanguages ?? DEFAULT_LANGUAGES);
+    setSortBy(currentFilters?.sortBy || defaultSort);
+    setUnplayedOnly(currentFilters?.unplayedOnly ?? true);
+    setYearRange(currentFilters?.yearRange || [minYearLimit, maxYearLimit]);
+    setRuntimeRange(currentFilters?.runtimeRange || [0, 240]);
+    setMinRating(currentFilters?.minCommunityRating || 0);
+    setProviderSearch("");
+  }, [currentFilters, availableWatchProviderIds, minYearLimit, maxYearLimit, defaultSort]);
 
   const normalizeFilters = (f: Filters): Filters => {
     const isYearDefault = !f.yearRange || (f.yearRange[0] === minYearLimit && f.yearRange[1] === maxYearLimit);
@@ -195,6 +193,12 @@ export function FilterDrawer({ open, onOpenChange, currentFilters, onSave }: Fil
   };
 
   const handleOpenChange = (newOpen: boolean) => {
+    if (newOpen) {
+      initializeFromCurrentFilters();
+      onOpenChange(newOpen);
+      return;
+    }
+
     if (!newOpen) {
       const newFilters = getCurrentFiltersObject();
       const currentFiltersNorm = normalizeFilters(currentFilters);
@@ -396,7 +400,7 @@ export function FilterDrawer({ open, onOpenChange, currentFilters, onSave }: Fil
                   <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/30 border border-border/50">
                     <div className="space-y-0.5">
                       <Label className="text-sm font-semibold tracking-tight">Hide Watched</Label>
-                      <p className="text-xs text-muted-foreground font-medium">Only show items you haven't seen yet</p>
+                      <p className="text-xs text-muted-foreground font-medium">Only show items you haven&apos;t seen yet</p>
                     </div>
                     <Switch
                       checked={unplayedOnly}

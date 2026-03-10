@@ -55,7 +55,7 @@ export function MatchOverlay({ item, sessionCode, onClose }: MatchOverlayProps) 
               </motion.div>
 
               <h1 className="text-5xl font-black italic text-neutral-100 mb-2 drop-shadow-2xl tracking-tighter uppercase">
-                It's a match!
+                It&apos;s a match!
               </h1>
               <p className="text-neutral-200 md:text-md text-lg mb-6 px-4 z-1">
                 You and {otherLabel} want to watch <span className="text-neutral-200 font-bold">{item.Name}</span>

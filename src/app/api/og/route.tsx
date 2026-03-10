@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   try {
     try {
       await connection()
-    } catch (error) {
+    } catch {
       console.warn('[og] connection() failed during prerender.')
       return renderFallbackImage('Swiparr')
     }
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
         }}>
           {/* Header with Logo and Emoji */}
           <div tw="flex items-center mb-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={logoUrl}
               alt="Logo"

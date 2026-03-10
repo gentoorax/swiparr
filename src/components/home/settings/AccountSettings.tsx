@@ -4,7 +4,6 @@ import { Shield, UserPlus, Globe } from "lucide-react";
 import { SettingsSection } from "./SettingsSection";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSession } from "@/hooks/api";
 import { useRuntimeConfig } from "@/lib/runtime-config";
 import { ProfilePicturePicker } from "../../profile/ProfilePicturePicker";

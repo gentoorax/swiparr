@@ -90,7 +90,7 @@ export default function SessionContent() {
                 await apiClient.post("/api/auth/logout");
                 window.location.href = `${basePath}/login`;
             }
-        } catch (err) {
+        } catch {
             // Error handled by toast.promise
         }
     };
@@ -115,7 +115,6 @@ export default function SessionContent() {
             return;
         }
 
-        setIsOpen(true);
         joinInProgressRef.current = true;
 
         if (!normalizedActive) {
@@ -179,7 +178,7 @@ export default function SessionContent() {
         if (navigator.share) {
             try {
                 await navigator.share(shareData);
-            } catch (err) {
+            } catch {
                 console.log("Share cancelled");
             }
         } else if (navigator.clipboard) {
@@ -199,7 +198,7 @@ export default function SessionContent() {
                 title="Share Session"
                 value={fallbackValue}
             />
-            <Sheet open={isOpen} onOpenChange={setIsOpen}>
+            <Sheet open={isOpen || !!searchParams.get("join")} onOpenChange={setIsOpen}>
             <SheetTrigger asChild className="absolute left-6">
                 <Button variant="ghost" size="icon" className="text-foreground size-10 hover:bg-muted/30!">
                     <Users className="size-5" />

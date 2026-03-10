@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { getSessionOptions } from "@/lib/session";
 import { cookies } from "next/headers";
@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json({});
 }
 
-export async function PATCH(request: NextRequest) {
+export async function PATCH() {
     const cookieStore = await cookies();
     const session = await getIronSession<SessionData>(cookieStore, await getSessionOptions());
 
@@ -26,7 +26,7 @@ export async function PATCH(request: NextRequest) {
 
     try {
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: "Failed to update config" }, { status: 500 });
     }
 }

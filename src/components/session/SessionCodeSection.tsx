@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { UserPlus, Plus, Share2, LogOut, Info, X, Check, Copy } from "lucide-react";
+import { UserPlus, Plus, Share2, LogOut, Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SecureContextCopyFallback } from "../SecureContextCopyFallback";

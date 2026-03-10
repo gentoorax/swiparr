@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { getSessionOptions } from "@/lib/session";
 import { db, sessionMembers, userProfiles, sessions } from "@/lib/db";
@@ -6,7 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { SessionData } from "@/types";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
     const cookieStore = await cookies();
     const session = await getIronSession<SessionData>(cookieStore, await getSessionOptions());
     

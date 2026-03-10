@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { getSessionOptions } from "@/lib/session";
 import { db, likes, hiddens, sessionMembers, sessions } from "@/lib/db";
@@ -6,7 +6,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { SessionData, SessionStats } from "@/types";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
     const cookieStore = await cookies();
     const session = await getIronSession<SessionData>(cookieStore, await getSessionOptions());
     if (!session.isLoggedIn || !session.sessionCode) {
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(stats);
 }
 
-export async function DELETE(request: NextRequest) {
+export async function DELETE() {
     const cookieStore = await cookies();
     const session = await getIronSession<SessionData>(cookieStore, await getSessionOptions());
     if (!session.isLoggedIn || !session.sessionCode) {
