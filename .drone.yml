@@ -230,12 +230,14 @@ steps:
     image: alpine/git:2.47.2
     commands:
       - mkdir -p .drone
-      - sourceRcTag="$${SOURCE_RC_TAG:-$${RC_TAG:-}}"
-      - if [ -z "$${sourceRcTag}" ]; then echo "SOURCE_RC_TAG is required for production promote (for example 1.3.120-rc1)."; exit 1; fi
-      - releaseTag="$(echo "$${sourceRcTag}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)-rc[0-9]+$/\1/')"
-      - if [ "$${releaseTag}" = "$${sourceRcTag}" ]; then echo "Invalid SOURCE_RC_TAG $${sourceRcTag}"; exit 1; fi
-      - 'echo "Resolved production promote tags: sourceRcTag=$${sourceRcTag}, releaseTag=$${releaseTag}"'
-      - echo "SOURCE_RC_TAG=$${sourceRcTag}" > .drone/promote-production.env
+      - sourceTag="$${SOURCE_RC_TAG:-$${RC_TAG:-$${SOURCE_ALPHA_TAG:-$${ALPHA_TAG:-}}}}"
+      - if [ -z "$${sourceTag}" ]; then echo "Provide SOURCE_RC_TAG (for example 1.3.120-rc1) or SOURCE_ALPHA_TAG (for example 1.3.120-alpha.abc1234)."; exit 1; fi
+      - releaseTag="$${sourceTag}"
+      - if echo "$${sourceTag}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$'; then releaseTag="$(echo "$${sourceTag}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)-rc[0-9]+$/\1/')"; fi
+      - if echo "$${sourceTag}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9a-f]+$'; then releaseTag="$(echo "$${sourceTag}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)-alpha\.[0-9a-f]+$/\1/')"; fi
+      - if [ "$${releaseTag}" = "$${sourceTag}" ]; then echo "Invalid promote source tag $${sourceTag}. Expected rc or alpha tag."; exit 1; fi
+      - 'echo "Resolved production promote tags: sourceTag=$${sourceTag}, releaseTag=$${releaseTag}"'
+      - echo "SOURCE_PROMOTE_TAG=$${sourceTag}" > .drone/promote-production.env
       - echo "RELEASE_TAG=$${releaseTag}" >> .drone/promote-production.env
 
   - name: retag-image-to-production
@@ -256,6 +258,6 @@ steps:
       - mkdir -p /tmp/harbor-certs
       - printf '%s' "$${HARBOR_CA_CERT}" > /tmp/harbor-certs/harbor-ca.crt
       - imageRef="harbor.internal.promethix.net/promethix/swiparr"
-      - 'echo "Retagging image to production: source=$${imageRef}:$${SOURCE_RC_TAG}, destination1=$${imageRef}:$${RELEASE_TAG}, destination2=$${imageRef}:latest"'
-      - skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${imageRef}:$${SOURCE_RC_TAG}" "docker://$${imageRef}:$${RELEASE_TAG}"
-      - skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${imageRef}:$${SOURCE_RC_TAG}" "docker://$${imageRef}:latest"
+      - 'echo "Retagging image to production: source=$${imageRef}:$${SOURCE_PROMOTE_TAG}, destination1=$${imageRef}:$${RELEASE_TAG}, destination2=$${imageRef}:latest"'
+      - skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${imageRef}:$${SOURCE_PROMOTE_TAG}" "docker://$${imageRef}:$${RELEASE_TAG}"
+      - skopeo copy --src-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --dest-creds "$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}" --src-cert-dir /tmp/harbor-certs --dest-cert-dir /tmp/harbor-certs "docker://$${imageRef}:$${SOURCE_PROMOTE_TAG}" "docker://$${imageRef}:latest"
