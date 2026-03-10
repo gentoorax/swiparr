@@ -62,6 +62,48 @@ export const FramerTinderCard = forwardRef<TinderCardHandle, TinderCardProps>(
     const nopeOpacity = useTransform(x, [-100, -20], [1, 0]);
     const likeOpacity = useTransform(x, [20, 100], [0, 1]);
 
+    const swipeProgrammatically = async (dir: Direction) => {
+      onSwipe?.(dir);
+
+      // Fly out distance
+      const flyDist = 250;
+
+      let targetX = 0;
+      let targetY = 0;
+      let targetRotate = 0;
+
+      // Logic for button press
+      switch (dir) {
+        case "left":
+          targetX = -flyDist;
+          targetRotate = -20;
+          break;
+        case "right":
+          targetX = flyDist;
+          targetRotate = 20;
+          break;
+        case "up": // Should not happen based on requirements, but handled
+          targetY = -flyDist;
+          break;
+        case "down":
+          targetY = flyDist;
+          break;
+      }
+
+      // SLOWER ANIMATION (0.6s) with a custom ease curve for a "Heavy" feel
+      await controls.start({
+        x: targetX,
+        y: targetY,
+        rotate: targetRotate,
+        transition: {
+          duration: 0.6,
+          ease: [0.2, 0.8, 0.2, 1] // Cubic bezier
+        },
+      });
+
+      onCardLeftScreen?.(dir);
+    };
+
     useImperativeHandle(ref, () => ({
       async swipe(dir: Direction) {
         if (isAnimating.current) return;
@@ -107,48 +149,6 @@ export const FramerTinderCard = forwardRef<TinderCardHandle, TinderCardProps>(
       },
     }));
 
-    const swipeProgrammatically = async (dir: Direction) => {
-      onSwipe?.(dir);
-
-      // Fly out distance
-      const flyDist = 250;
-
-      let targetX = 0;
-      let targetY = 0;
-      let targetRotate = 0;
-
-      // Logic for button press
-      switch (dir) {
-        case "left":
-          targetX = -flyDist;
-          targetRotate = -20;
-          break;
-        case "right":
-          targetX = flyDist;
-          targetRotate = 20;
-          break;
-        case "up": // Should not happen based on requirements, but handled
-          targetY = -flyDist;
-          break;
-        case "down":
-          targetY = flyDist;
-          break;
-      }
-
-      // SLOWER ANIMATION (0.6s) with a custom ease curve for a "Heavy" feel
-      await controls.start({
-        x: targetX,
-        y: targetY,
-        rotate: targetRotate,
-        transition: {
-          duration: 0.6,
-          ease: [0.2, 0.8, 0.2, 1] // Cubic bezier
-        },
-      });
-
-      onCardLeftScreen?.(dir);
-    };
-
     const handleDragEnd = async (_: unknown, info: PanInfo) => {
       const offsetX = info.offset.x;
       const offsetY = info.offset.y;
@@ -184,11 +184,11 @@ export const FramerTinderCard = forwardRef<TinderCardHandle, TinderCardProps>(
 
         // Calculate a target far off screen based on direction
         const flyVal = 300;
-        let targetX = direction === "left" ? -flyVal : flyVal;
+        const targetX = direction === "left" ? -flyVal : flyVal;
 
         // Calculate Y based on trajectory to make it look like a physics throw
         // We add the velocity to the current Y
-        let targetY = y.get() + (velocityY * 2);
+        const targetY = y.get() + (velocityY * 2);
 
         await controls.start({
           x: targetX,
@@ -251,3 +251,5 @@ export const FramerTinderCard = forwardRef<TinderCardHandle, TinderCardProps>(
     );
   }
 );
+
+FramerTinderCard.displayName = "FramerTinderCard";

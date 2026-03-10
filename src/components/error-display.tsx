@@ -42,7 +42,7 @@ export default function ErrorDisplay({ error, reset, type = 'generic' }: ErrorDi
       title: 'Page Not Found',
       description: "We couldn't find the page you're looking for. It might have been moved or deleted.",
       buttonText: 'Back',
-      action: () => (window.location.href = `${basePath}/`),
+      action: () => window.location.assign(`${basePath}/`),
     },
     '500': {
       icon: AlertCircle,

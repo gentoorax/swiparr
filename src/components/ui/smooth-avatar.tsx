@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/lib/user-store";
@@ -54,19 +54,12 @@ export function SmoothAvatar({
 
     const initials = userName ? userName.substring(0, 1).toUpperCase() : "?";
 
-    // Re-evaluate status when knowledge changes
-    useEffect(() => {
-        if (knownNoImage) {
-            setStatus('error');
-        } else if (imageUrl) {
-            setStatus('loading');
-        }
-    }, [knownNoImage, imageUrl]);
+    const effectiveStatus = knownNoImage ? 'error' : status;
 
     return (
         <div className={cn("relative flex shrink-0 overflow-hidden rounded-full bg-muted", className)}>
             {/* Initials Layer (Bottom) */}
-            {(status === 'error' || !imageUrl) && (
+            {(effectiveStatus === 'error' || !imageUrl) && (
                 <div className={cn(
                     "absolute inset-0 flex items-center justify-center font-semibold text-muted-foreground select-none animate-in fade-in duration-300",
                     fallbackClassName
@@ -76,7 +69,7 @@ export function SmoothAvatar({
             )}
 
             {/* Skeleton Layer (Middle) */}
-            {status === 'loading' && (
+            {effectiveStatus === 'loading' && (
                 <Skeleton className="absolute inset-0 z-10 size-full rounded-full" />
             )}
 
@@ -90,7 +83,7 @@ export function SmoothAvatar({
                     priority={isCurrentUser}
                     className={cn(
                         "object-cover transition-opacity duration-300",
-                        status === 'success' ? "opacity-100" : "opacity-0"
+                        effectiveStatus === 'success' ? "opacity-100" : "opacity-0"
                     )}
                     onLoad={() => setStatus('success')}
                     onError={() => {

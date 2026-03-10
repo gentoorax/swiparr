@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { SettingsSection } from "./SettingsSection";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -24,7 +24,7 @@ export function AdminSettings() {
     const runtimeConfig = useRuntimeConfig();
     const capabilities = sessionStatus?.capabilities || runtimeConfig.capabilities;
 
-    const [includedLibraries, setIncludedLibraries] = useState<string[]>([]);
+    const [includedLibraries, setIncludedLibraries] = useState<string[] | null>(null);
     const [isExpanded, setIsExpanded] = useState(false);
 
     const { data: adminStatus } = useAdminStatus();
@@ -34,11 +34,7 @@ export function AdminSettings() {
     const updateLibrariesMutation = useUpdateAdminLibraries();
     const claimMutation = useClaimAdmin();
 
-    useEffect(() => {
-        if (adminLibraries) {
-            setIncludedLibraries(adminLibraries);
-        }
-    }, [adminLibraries]);
+    const effectiveLibraries = includedLibraries ?? adminLibraries ?? [];
 
     const handleClaimAdmin = () => {
         toast.promise(claimMutation.mutateAsync(), {
@@ -56,13 +52,15 @@ export function AdminSettings() {
             setIncludedLibraries([]);
             return;
         }
-        setIncludedLibraries(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        setIncludedLibraries(prev => {
+            const current = prev ?? adminLibraries ?? [];
+            return current.includes(id) ? current.filter(i => i !== id) : [...current, id];
+        }
         );
     };
 
     const saveLibraries = async () => {
-        toast.promise(updateLibrariesMutation.mutateAsync(includedLibraries), {
+        toast.promise(updateLibrariesMutation.mutateAsync(effectiveLibraries), {
             loading: "Updating libraries...",
             success: () => {
                 return "Libraries updated successfully";
@@ -137,8 +135,8 @@ export function AdminSettings() {
                                                 </Label>
                                                 <Switch
                                                     id="all-libraries"
-                                                    checked={includedLibraries.length === 0}
-                                                    disabled={includedLibraries.length === 0}
+                                                    checked={effectiveLibraries.length === 0}
+                                                    disabled={effectiveLibraries.length === 0}
                                                     onCheckedChange={() => toggleLibrary("all")}
                                                 />
                                             </div>
@@ -156,7 +154,7 @@ export function AdminSettings() {
                                                 </div>
                                             ) : (
                                                 availableLibraries.map((lib: MediaLibrary) => {
-                                                    const isIncluded = includedLibraries.includes(lib.Id);
+                                                    const isIncluded = effectiveLibraries.includes(lib.Id);
                                                     return (
                                                         <button
                                                             key={lib.Id}

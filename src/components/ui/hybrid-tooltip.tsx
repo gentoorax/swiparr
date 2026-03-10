@@ -1,6 +1,7 @@
 'use client';
 
-import { PropsWithChildren, createContext, useContext, useEffect, useState } from 'react';
+import type React from 'react';
+import { PropsWithChildren, createContext, useContext, useState } from 'react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip';
 import { Popover, PopoverTrigger, PopoverContent } from './popover';
 import { TooltipContentProps, TooltipProps, TooltipProviderProps, TooltipTriggerProps } from '@radix-ui/react-tooltip';
@@ -15,11 +16,10 @@ const TouchContext = createContext<boolean | undefined>(undefined);
 const useTouch = () => useContext(TouchContext);
 
 const TouchProvider = (props: PropsWithChildren) => {
-  const [isTouch, setTouch] = useState<boolean>();
-
-  useEffect(() => {
-    setTouch(window.matchMedia('(pointer: coarse)').matches);
-  }, []);
+  const [isTouch] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(pointer: coarse)').matches;
+  });
 
   return <TouchContext.Provider value={isTouch} {...props} />;
 };

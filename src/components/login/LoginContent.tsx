@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useQuickConnectUpdates } from "@/lib/use-updates";
 import { usePlexPinAuth } from "@/hooks/usePlexPinAuth";
@@ -18,7 +18,6 @@ import { AdminInitializedView } from "./AdminInitializedView";
 import { AuthView } from "./AuthView";
 import { UniversalView } from "./UniversalView";
 import { SiPlex, SiJellyfin, SiThemoviedatabase, SiEmby } from "react-icons/si";
-import GradientText from "../ui/gradient-text";
 import { SecureContextCopyFallback } from "../SecureContextCopyFallback";
 
 
@@ -88,8 +87,6 @@ export default function LoginContent() {
 
   useEffect(() => {
     if (sessionCodeParam) {
-      setGuestSessionCode(sessionCodeParam);
-
       // Fetch session provider to automatically switch to the correct UI
       apiClient.get(`/api/session/provider?code=${sessionCodeParam}`)
         .then(res => {
@@ -105,12 +102,6 @@ export default function LoginContent() {
 
   const [activeTab, setActiveTab] = useState<string>("login");
 
-  useEffect(() => {
-    if (sessionCodeParam) {
-      setActiveTab("join");
-    }
-  }, [sessionCodeParam]);
-
   const copyToClipboard = async () => {
     if (qcCode) {
       if (!window.isSecureContext || !navigator.clipboard) {
@@ -125,8 +116,13 @@ export default function LoginContent() {
   };
 
 
-  const onAuthorized = useCallback((data?: any) => {
-    if (data?.wasMadeAdmin) {
+  const onAuthorized = useCallback((data?: unknown) => {
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "wasMadeAdmin" in data &&
+      data.wasMadeAdmin === true
+    ) {
       setWasMadeAdmin(true);
       setLoading(false);
     } else {
@@ -160,7 +156,7 @@ export default function LoginContent() {
         return res.data;
       }
 
-      const config: any = {};
+      const config: Record<string, string> = {};
       if (selectedProvider === ProviderType.JELLYFIN || selectedProvider === ProviderType.PLEX || selectedProvider === ProviderType.EMBY) {
         if (serverUrl) config.serverUrl = serverUrl;
       } else if (selectedProvider === ProviderType.TMDB) {
@@ -359,7 +355,7 @@ export default function LoginContent() {
                   setPassword={setPassword}
                   guestName={guestName}
                   setGuestName={setGuestName}
-                  guestSessionCode={guestSessionCode}
+                  guestSessionCode={sessionCodeParam || guestSessionCode}
                   setGuestSessionCode={setGuestSessionCode}
                   loading={loading}
                   handleLogin={handleLogin}
@@ -373,7 +369,7 @@ export default function LoginContent() {
                   hasQuickConnect={capabilities.hasQuickConnect}
                   isExperimental={providerLock ? capabilities.isExperimental : selectedProvider === ProviderType.EMBY}
                   onProfilePictureChange={setProfilePicture}
-                  activeTab={activeTab}
+                  activeTab={sessionCodeParam ? "join" : activeTab}
                   setActiveTab={setActiveTab}
                   startPlexPinAuth={startPlexPinAuth}
                   plexPinCode={plexPinCode}
