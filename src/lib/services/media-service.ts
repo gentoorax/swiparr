@@ -165,6 +165,23 @@ export class MediaService {
     const isCrossProviderSession = await this.isCrossProviderSession(sessionCode, auth.provider);
 
     if (isCrossProviderSession) {
+      if (sortBy !== "Random") {
+        const alignedSortBy = sortBy === "Newest" ? "Newest" : "SortName";
+        return this.getPagedSessionItems(
+          sessionFilters,
+          auth,
+          provider,
+          excludeRefs.externalIds,
+          includedLibraries,
+          watchProviders,
+          watchRegion,
+          page,
+          limit,
+          effectiveOffset,
+          alignedSortBy
+        );
+      }
+
       return this.getCanonicalSessionItems(
         sessionCode,
         sessionFilters,
@@ -195,6 +212,34 @@ export class MediaService {
       );
     }
 
+    return this.getPagedSessionItems(
+      sessionFilters,
+      auth,
+      provider,
+      excludeRefs.externalIds,
+      includedLibraries,
+      watchProviders,
+      watchRegion,
+      page,
+      limit,
+      effectiveOffset,
+      sortBy
+    );
+  }
+
+  private static async getPagedSessionItems(
+    sessionFilters: Filters | null,
+    auth: any,
+    provider: any,
+    excludeIds: Set<string>,
+    includedLibraries: string[],
+    watchProviders: string[] | undefined,
+    watchRegion: string,
+    page: number,
+    limit: number,
+    effectiveOffset: number,
+    sortBy: string
+  ): Promise<{ items: MediaItem[]; hasMore: boolean }> {
     const isTmdb = auth.provider === ProviderType.TMDB;
     const baseFetchLimit = isTmdb ? 20 : Math.max(limit * 2, 40);
     const maxFetchLimit = isTmdb ? 20 : 200;
@@ -255,7 +300,7 @@ export class MediaService {
       }
 
       let filtered = this.applyClientFilters(fetchedItems, sessionFilters);
-      filtered = filtered.filter(item => !excludeRefs.externalIds.has(item.Id));
+      filtered = filtered.filter(item => !excludeIds.has(item.Id));
       items.push(...filtered);
 
       if (hasExclusionFilters) {

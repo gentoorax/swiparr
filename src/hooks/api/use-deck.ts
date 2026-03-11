@@ -26,6 +26,7 @@ export function useDeck() {
     },
     initialPageParam: 0,
     enabled: !!session,
-    gcTime: 0, // Don't cache deck data when switching modes (session, solo) to avoid showing stale card stacks
+    staleTime: 1000 * 30,
+    gcTime: 1000 * 60 * 5,
   });
 }
